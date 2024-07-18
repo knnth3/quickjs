@@ -1,9 +1,10 @@
-cmake_minimum_required(VERSION 3.9)
+cmake_minimum_required(VERSION 3.12)
 
 project(quickjs LANGUAGES C)
 
 include(CheckCCompilerFlag)
 include(GNUInstallDirs)
+include(GenerateExportHeader)
 
 set(CMAKE_C_VISIBILITY_PRESET hidden)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -216,6 +217,21 @@ add_qjs_libc_if_needed(qjsc)
 target_compile_definitions(qjsc PRIVATE ${qjs_defines})
 target_link_libraries(qjsc ${qjs_libs})
 
+# QuickJS SHARED LIBRARY
+#
+
+add_library(qjslib SHARED "qjslib.c")
+add_qjs_libc_if_needed(qjslib)
+target_compile_definitions(qjslib PRIVATE ${qjs_defines})
+target_link_libraries(qjslib ${qjs_libs})
+generate_export_header(qjslib)
+set_target_properties(qjslib PROPERTIES LINKER_LANGUAGE C)
+
+# QuickJS Shared Library EXE
+#
+
+add_executable(qjslib_exe qjslibexe.c)
+target_link_libraries(qjslib_exe qjslib)
 
 # QuickJS CLI
 #
