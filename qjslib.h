@@ -48,7 +48,7 @@ QJSLIB_EXPORT JSValue qjs_call_func(JSContext* ctx, JSValue value, JSValue this_
 
 QJSLIB_EXPORT int qjs_eval(JSContext* ctx, const char* filename, const char* code, uint32_t isModule);
 QJSLIB_EXPORT JSValue qjs_eval_ex(JSContext* ctx, const char* filename, const char* code, uint32_t isModule);
-QJSLIB_EXPORT void qjs_tick(JSContext* ctx);
+QJSLIB_EXPORT int qjs_tick(JSContext* ctx);
 
 // Modules
 QJSLIB_EXPORT void qjs_set_module_loader(JSRuntime* rt, JSLoadModuleFunc* func);

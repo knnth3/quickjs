@@ -84,7 +84,7 @@ int main(int argc, char** argv)
     qjs_eval(ctx, "<os>", os, 1);
 
     const char* script = ""
-        "const ENV = require('environment');"
+        "setTimeout(() => { console.log('Timer finished!'); }, 1000);"
         "console.log('Starting Timeout...');";
     int result = qjs_eval(ctx, "<main>", script, 0);
 
@@ -98,7 +98,13 @@ int main(int argc, char** argv)
         qjs_free_string(ctx, stackTrace);
     }
 
-    qjs_tick(ctx);
+    for (;;)
+    {
+        if (qjs_tick(ctx) != 0)
+        {
+            break;
+        }
+    }
     qjs_release_context(ctx);
     qjs_release_runtime(rt);
     return 0;

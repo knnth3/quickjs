@@ -522,7 +522,14 @@ int main(int argc, char **argv)
         if (interactive) {
             js_std_eval_binary(ctx, qjsc_repl, qjsc_repl_size, 0);
         }
-        js_std_loop(ctx);
+
+        for (;;)
+        {
+            if (js_std_tick(ctx) != 0)
+            {
+                break;
+            }
+        }
     }
 
     if (dump_memory) {

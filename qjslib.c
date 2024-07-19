@@ -296,9 +296,9 @@ JSValue qjs_eval_ex(JSContext* ctx, const char* filename, const char* code, uint
     return eval_buf(ctx, code, strlen(code), filename, eval_flags);
 }
 
-void qjs_tick(JSContext* ctx)
+int qjs_tick(JSContext* ctx)
 {
-    js_std_loop(ctx);
+    return js_std_tick(ctx);
 }
 
 void qjs_set_module_loader(JSRuntime* rt, JSLoadModuleFunc* func)

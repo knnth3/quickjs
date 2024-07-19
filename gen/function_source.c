@@ -74,7 +74,13 @@ int main(int argc, char **argv)
   ctx = JS_NewCustomContext(rt);
   js_std_add_helpers(ctx, argc, argv);
   js_std_eval_binary(ctx, qjsc_function_source, qjsc_function_source_size, 0);
-  js_std_loop(ctx);
+  for (;;)
+  {
+      if (js_std_tick(ctx) != 0)
+      {
+          break;
+      }
+  }
   JS_FreeContext(ctx);
   js_std_free_handlers(rt);
   JS_FreeRuntime(rt);
