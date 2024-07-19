@@ -30,11 +30,9 @@ static const JSCFunctionListEntry global_obj[] = {
     JS_OBJECT_DEF("navigator", navigator_obj, countof(navigator_obj), JS_PROP_C_W_E),
 };
 
-static int eval_buf(JSContext* ctx, const void* buf, int buf_len, const char* filename, int eval_flags)
+static JSValue eval_buf(JSContext* ctx, const void* buf, int buf_len, const char* filename, int eval_flags)
 {
     JSValue val;
-    int ret;
-
     if ((eval_flags & JS_EVAL_TYPE_MASK) == JS_EVAL_TYPE_MODULE) {
         /* for the modules, we compile then run to be able to set
            import.meta */
@@ -49,15 +47,8 @@ static int eval_buf(JSContext* ctx, const void* buf, int buf_len, const char* fi
     else {
         val = JS_Eval(ctx, buf, buf_len, filename, eval_flags);
     }
-    if (JS_IsException(val)) {
-        js_std_dump_error(ctx);
-        ret = -1;
-    }
-    else {
-        ret = 0;
-    }
-    JS_FreeValue(ctx, val);
-    return ret;
+
+    return val;
 }
 
 static JSContext* JS_NewCustomContext(JSRuntime* rt)
@@ -162,6 +153,22 @@ void qjs_release_context(JSContext* ctx)
     JS_FreeContext(ctx);
 }
 
+void qjs_get_exception(JSContext* ctx, void** message, void** stackTrace)
+{
+    JSValue exception_val = JS_GetException(ctx);
+    BOOL is_error = JS_IsError(ctx, exception_val);
+    (*message) = JS_ToCString(ctx, exception_val);
+    if (is_error) {
+        JSValue val = JS_GetPropertyStr(ctx, exception_val, "stack");
+        if (!JS_IsUndefined(val)) {
+            (*stackTrace) = JS_ToCString(ctx, val);
+        }
+        JS_FreeValue(ctx, val);
+    }
+
+    JS_FreeValue(ctx, exception_val);
+}
+
 JSValue qjs_create_func(JSContext* ctx, JSCFunction* func, const char* name)
 {
     return JS_NewCFunction(ctx, func, name, 1);
@@ -218,6 +225,11 @@ void qjs_free_string(JSContext* ctx, const char* str)
     JS_FreeCString(ctx, str);
 }
 
+void qjs_free_value(JSContext* ctx, JSValue value)
+{
+    JS_FreeValue(ctx, value);
+}
+
 int32_t qjs_as_int_32(JSContext* ctx, JSValue value)
 {
     int32_t result;
@@ -262,8 +274,26 @@ int qjs_eval(JSContext* ctx, const char* filename, const char* code, uint32_t is
     else
         eval_flags = JS_EVAL_TYPE_GLOBAL;
 
-    ret = eval_buf(ctx, code, strlen(code), filename, eval_flags);
+    JSValue val = eval_buf(ctx, code, strlen(code), filename, eval_flags);
+    if (JS_IsException(val)) {
+        ret = -1;
+    }
+    else {
+        ret = 0;
+    }
+    JS_FreeValue(ctx, val);
     return ret;
+}
+
+JSValue qjs_eval_ex(JSContext* ctx, const char* filename, const char* code, uint32_t isModule)
+{
+    int ret, eval_flags;
+    if (isModule)
+        eval_flags = JS_EVAL_TYPE_MODULE;
+    else
+        eval_flags = JS_EVAL_TYPE_GLOBAL;
+
+    return eval_buf(ctx, code, strlen(code), filename, eval_flags);
 }
 
 void qjs_tick(JSContext* ctx)

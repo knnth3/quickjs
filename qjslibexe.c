@@ -84,9 +84,19 @@ int main(int argc, char** argv)
     qjs_eval(ctx, "<os>", os, 1);
 
     const char* script = ""
-        "setTimeout(() => { console.log('Done!'); }, 1000);"
+        "const ENV = require('environment');"
         "console.log('Starting Timeout...');";
-    qjs_eval(ctx, "<main>", script, 0);
+    int result = qjs_eval(ctx, "<main>", script, 0);
+
+    if (result != 0)
+    {
+        const char* message = 0;
+        const char* stackTrace = 0;
+        qjs_get_exception(ctx, &message, &stackTrace);
+        printf("extracted exception:\n%s\n%s", message, stackTrace);
+        qjs_free_string(ctx, message);
+        qjs_free_string(ctx, stackTrace);
+    }
 
     qjs_tick(ctx);
     qjs_release_context(ctx);
