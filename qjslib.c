@@ -4,16 +4,6 @@
 #include "cutils.h"
 #include "quickjs-libc.h"
 
-uint8_t* js_load_contents(JSContext* ctx, const char* code, size_t* pbuf_len)
-{
-    size_t buf_len = strlen(code);
-    uint8_t* buf = js_malloc(ctx, buf_len + 1);
-    memcpy(buf, code, buf_len);
-    buf[buf_len] = '\0';
-    *pbuf_len = buf_len;
-    return buf;
-}
-
 static JSValue js_gc(JSContext* ctx, JSValue this_val,
     int argc, JSValue* argv)
 {
@@ -29,6 +19,28 @@ static const JSCFunctionListEntry global_obj[] = {
     JS_CFUNC_DEF("gc", 0, js_gc),
     JS_OBJECT_DEF("navigator", navigator_obj, countof(navigator_obj), JS_PROP_C_W_E),
 };
+
+static JSContext* JS_NewCustomContext(JSRuntime* rt)
+{
+    JSContext* ctx;
+    ctx = JS_NewContext(rt);
+    if (!ctx)
+        return NULL;
+    /* system modules */
+    js_init_module_std(ctx, "std");
+    js_init_module_os(ctx, "os");
+
+    JSValue global = JS_GetGlobalObject(ctx);
+    JS_SetPropertyFunctionList(ctx, global, global_obj, countof(global_obj));
+    JS_FreeValue(ctx, global);
+
+    return ctx;
+}
+
+static void* resolve_module_internal(JSContext* ctx, const char* module_base_name, const char* module_name, void* opaque)
+{
+    return qjs_create_native_string(ctx, module_name);
+}
 
 static JSValue eval_buf(JSContext* ctx, const void* buf, int buf_len, const char* filename, int eval_flags)
 {
@@ -51,78 +63,9 @@ static JSValue eval_buf(JSContext* ctx, const void* buf, int buf_len, const char
     return val;
 }
 
-static JSContext* JS_NewCustomContext(JSRuntime* rt)
-{
-    JSContext* ctx;
-    ctx = JS_NewContext(rt);
-    if (!ctx)
-        return NULL;
-    /* system modules */
-    js_init_module_std(ctx, "std");
-    js_init_module_os(ctx, "os");
-
-    JSValue global = JS_GetGlobalObject(ctx);
-    JS_SetPropertyFunctionList(ctx, global, global_obj, countof(global_obj));
-    JS_FreeValue(ctx, global);
-
-    return ctx;
-}
-
-static JSModuleDef* js_module_loader_ext(JSContext* ctx, const char* module_name, void* opaque)
-{
-    JSModuleDef* m;
-
-    size_t buf_len;
-    uint8_t* buf;
-    JSValue func_val;
-
-    buf = js_load_file(ctx, &buf_len, module_name);
-
-    JSLoadModuleFunc* loadFunc = (JSLoadModuleFunc*)opaque;
-    if (!loadFunc) {
-        JS_ThrowReferenceError(ctx, "could not load module filename '%s'",
-            module_name);
-        return NULL;
-    }
-
-    NativeBuffer buffer = { NULL, NULL };
-    loadFunc(ctx, module_name, &buffer);
-    if (!buffer.data) {
-        JS_ThrowReferenceError(ctx, "could not load module filename '%s'",
-            module_name);
-        return NULL;
-    }
-
-    buf = js_load_contents(ctx, buffer.data, &buf_len);
-
-    if (buffer.unload_func) {
-        buffer.unload_func(buffer.data);
-    }
-
-    if (!buf) {
-        JS_ThrowReferenceError(ctx, "could not load module filename '%s'",
-            module_name);
-        return NULL;
-    }
-
-    /* compile the module */
-    func_val = JS_Eval(ctx, (char*)buf, buf_len, module_name,
-        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
-    js_free(ctx, buf);
-    if (JS_IsException(func_val))
-        return NULL;
-    /* XXX: could propagate the exception */
-    js_module_set_import_meta(ctx, func_val, TRUE, FALSE);
-    /* the module is already referenced, so we must free it */
-    m = JS_VALUE_GET_PTR(func_val);
-    JS_FreeValue(ctx, func_val);
-    return m;
-}
-
 JSRuntime* qjs_create_runtime()
 {
     JSRuntime* rt = JS_NewRuntime();
-    js_std_set_worker_new_context_func(JS_NewCustomContext);
     js_std_init_handlers(rt);
     return rt;
 }
@@ -199,6 +142,14 @@ JSValue qjs_create_double(JSContext* ctx, double value)
     return JS_NewFloat64(ctx, value);
 }
 
+void* qjs_create_native_string(JSContext* ctx, const char* value)
+{
+    size_t buffer_len = strlen(value) + 1;
+    void* clone = js_malloc(ctx, buffer_len);
+    memcpy(clone, value, buffer_len);
+    return clone;
+}
+
 void qjs_set_property(JSContext* ctx, JSValue obj, const char* name, JSValue value)
 {
     JS_SetPropertyStr(ctx, obj, name, value);
@@ -261,9 +212,21 @@ JSValue qjs_call_func(JSContext* ctx, JSValue value, JSValue this_obj, int argc,
     return JS_Call(ctx, value, this_obj, argc, argv);
 }
 
-void qjs_fetch_string(JSContext* ctx, JSValue value)
+JSModuleDef* qjs_create_module(JSContext* ctx, const char* name, const char* code)
 {
-    return JS_ToCString(ctx, value);
+    JSValue func_val = JS_Eval(ctx, code, strlen(code), name,
+        JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+
+    if (JS_IsException(func_val))
+        return NULL;
+
+    /* XXX: could propagate the exception */
+    js_module_set_import_meta(ctx, func_val, TRUE, FALSE);
+
+    /* the module is already referenced, so we must free it */
+    JSModuleDef* m = JS_VALUE_GET_PTR(func_val);
+    JS_FreeValue(ctx, func_val);
+    return m;
 }
 
 int qjs_eval(JSContext* ctx, const char* filename, const char* code, uint32_t isModule)
@@ -301,7 +264,10 @@ int qjs_tick(JSContext* ctx)
     return js_std_tick(ctx);
 }
 
-void qjs_set_module_loader(JSRuntime* rt, JSLoadModuleFunc* func)
+void qjs_set_module_loader(JSRuntime* rt, JSModuleNormalizeFunc* nameResolver, JSModuleLoaderFunc* moduleLoader)
 {
-    JS_SetModuleLoaderFunc(rt, NULL, js_module_loader_ext, func);
+    if (!nameResolver) {
+        nameResolver = resolve_module_internal;
+    }
+    JS_SetModuleLoaderFunc(rt, nameResolver, moduleLoader, NULL);
 }

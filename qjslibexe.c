@@ -54,22 +54,23 @@ static JSValue js_log(JSContext* ctx, JSValue this_val, int argc, JSValue* argv)
     return result;
 }
 
-static void module_loader(JSContext* ctx, const char* name, NativeBuffer* output)
+static JSModuleDef* module_loader(JSContext* ctx, const char* module_name, const char* base_module_name)
 {
-    printf("Loading module: %s\n", name);
-    if (strcmp(name, "examples/fib_module.js") == 0)
+    printf("Loading module: %s\n%s\n", module_name, base_module_name);
+    if (strcmp(module_name, "./examples/fib_module.js") == 0)
     {
         const char* contents = read_file("./examples/fib_module.js");
-        output->data = contents;
-        return;
+        return qjs_create_module(ctx, module_name, contents);
     }
+
+    return NULL;
 }
 
 int main(int argc, char** argv)
 {
     JSRuntime* rt = qjs_create_runtime();
     JSContext* ctx = qjs_create_context(rt);
-    qjs_set_module_loader(rt, module_loader);
+    qjs_set_module_loader(rt, NULL, module_loader);
 
     JSValue console = qjs_create_object(ctx);
     JSValue log = qjs_create_func(ctx, js_log, "log_ver_0");
@@ -84,9 +85,10 @@ int main(int argc, char** argv)
     qjs_eval(ctx, "<os>", os, 1);
 
     const char* script = ""
+        "import { fib } from './examples/fib_module.js';"
         "setTimeout(() => { console.log('Timer finished!'); }, 1000);"
         "console.log('Starting Timeout...');";
-    int result = qjs_eval(ctx, "<main>", script, 0);
+    int result = qjs_eval(ctx, "<main>", script, 1);
 
     if (result != 0)
     {
