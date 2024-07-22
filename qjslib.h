@@ -8,7 +8,8 @@
 
 QJSLIB_EXPORT JSRuntime* qjs_create_runtime();
 QJSLIB_EXPORT void qjs_release_runtime(JSRuntime* rt);
-QJSLIB_EXPORT void qjs_set_memory_limit(JSRuntime* rt, uint32_t limit);
+QJSLIB_EXPORT void qjs_set_memory_limit(JSRuntime* rt, uint64_t limit);
+QJSLIB_EXPORT void qjs_set_stack_size_limit(JSRuntime* rt, uint64_t limit);
 
 QJSLIB_EXPORT JSContext* qjs_create_context(JSRuntime* rt);
 QJSLIB_EXPORT void qjs_release_context(JSContext* ctx);

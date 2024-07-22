@@ -76,9 +76,14 @@ void qjs_release_runtime(JSRuntime* rt)
     JS_FreeRuntime(rt);
 }
 
-void qjs_set_memory_limit(JSRuntime* rt, uint32_t limit)
+void qjs_set_memory_limit(JSRuntime* rt, uint64_t limit)
 {
     JS_SetMemoryLimit(rt, limit);
+}
+
+void qjs_set_stack_size_limit(JSRuntime* rt, uint64_t limit)
+{
+    JS_SetMaxStackSize(rt, limit);
 }
 
 JSContext* qjs_create_context(JSRuntime* rt)
